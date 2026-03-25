@@ -316,8 +316,8 @@ for (const { name, total } of chartData) {
   col.add(barOuter)
 
   barOuter.add(new Container({
-    borderTopLeftRadius: 4,
-    borderTopRightRadius: 4,
+    borderRadius: 4,
+    borderBottomRadius: 0,
     height: `${Math.min(1, total / chartMax) * 100}%`,
     backgroundColor: colors.primary,
     width: '100%',

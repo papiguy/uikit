@@ -255,8 +255,8 @@ importers:
         specifier: 0.8.20
         version: 0.8.20
       '@ni2khanna/uikit-pub-sub':
-        specifier: 1.0.7
-        version: 1.0.7
+        specifier: workspace:*
+        version: link:../pub-sub
       '@preact/signals-core':
         specifier: ^1.5.1
         version: 1.8.0
@@ -1182,9 +1182,6 @@ packages:
 
   '@ni2khanna/msdfonts@0.8.20':
     resolution: {integrity: sha512-jHU6WmuouKEyjQHSKz7gw6e7qQA8Vcz2NiJ081iwac7f1Y6KYOVUjY0ZtjF2yP0W+IhLXjN3yW7YV+AhUw+pjw==}
-
-  '@ni2khanna/uikit-pub-sub@1.0.7':
-    resolution: {integrity: sha512-wb4HfcAVpm7qCA7R9SO3tPCqY8FNAZnU8lETXXAdgVsyg7PQxoPeyFyKf/4hrruFwfStDeKFGIoEMM614feTEA==}
 
   '@nodelib/fs.scandir@2.1.5':
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}
@@ -6093,10 +6090,6 @@ snapshots:
     optional: true
 
   '@ni2khanna/msdfonts@0.8.20': {}
-
-  '@ni2khanna/uikit-pub-sub@1.0.7':
-    dependencies:
-      '@preact/signals-core': 1.8.0
 
   '@nodelib/fs.scandir@2.1.5':
     dependencies:
