@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm -r convert:*)",
+      "Bash(pnpm -r generate:*)",
+      "Bash(pnpm -r build:*)",
+      "Bash(find:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(grep:*)",
+      "Bash(cat:*)",
+      "Bash(pnpm install:*)",
+      "Bash(python3:*)",
+      "Bash(pnpm test:*)",
+      "Bash(pnpm build:*)",
+      "Bash(npx tsc:*)"
+    ]
+  }
+}
