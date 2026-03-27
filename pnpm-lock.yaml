@@ -252,10 +252,10 @@ importers:
   packages/uikit:
     dependencies:
       '@ni2khanna/msdfonts':
-        specifier: 0.8.20
-        version: 0.8.20
+        specifier: workspace:^
+        version: link:../msdfonts
       '@ni2khanna/uikit-pub-sub':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../pub-sub
       '@preact/signals-core':
         specifier: ^1.5.1
@@ -1179,9 +1179,6 @@ packages:
   '@napi-rs/nice@1.0.1':
     resolution: {integrity: sha512-zM0mVWSXE0a0h9aKACLwKmD6nHcRiKrPpCfvaKqG1CqDEyjEawId0ocXxVzPMCAm6kkWr2P025msfxXEnt8UGQ==}
     engines: {node: '>= 10'}
-
-  '@ni2khanna/msdfonts@0.8.20':
-    resolution: {integrity: sha512-jHU6WmuouKEyjQHSKz7gw6e7qQA8Vcz2NiJ081iwac7f1Y6KYOVUjY0ZtjF2yP0W+IhLXjN3yW7YV+AhUw+pjw==}
 
   '@nodelib/fs.scandir@2.1.5':
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}
@@ -6088,8 +6085,6 @@ snapshots:
       '@napi-rs/nice-win32-ia32-msvc': 1.0.1
       '@napi-rs/nice-win32-x64-msvc': 1.0.1
     optional: true
-
-  '@ni2khanna/msdfonts@0.8.20': {}
 
   '@nodelib/fs.scandir@2.1.5':
     dependencies:
