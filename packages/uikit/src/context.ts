@@ -44,7 +44,10 @@ export function buildRootContext(
 
     root.value.requestCalculateLayout = createDeferredRequestLayoutCalculation(root.value, component)
 
-    const onFrame = () => void (root.value.reversePainterSortStableCache = undefined)
+    const onFrame = () => {
+      root.value.reversePainterSortStableCache = undefined
+      root.value.sceneGraphOrderCachePrepared = false
+    }
 
     root.value.onFrameSet.add(onFrame)
     abortController.signal.addEventListener('abort', () => root.value.onFrameSet.delete(onFrame))
