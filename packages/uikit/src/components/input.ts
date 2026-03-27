@@ -17,6 +17,11 @@ function cancelBlur(event: unknown) {
   cancelSet.add(event)
 }
 
+function stopEvent(event: { stopPropagation?: () => void; stopImmediatePropagation?: () => void }) {
+  event.stopPropagation?.()
+  event.stopImmediatePropagation?.()
+}
+
 export const canvasInputProps = {
   onPointerDown: (e: { nativeEvent: any; preventDefault: () => void }) => {
     if (!(document.activeElement instanceof HTMLElement)) {
@@ -33,6 +38,7 @@ export const canvasInputProps = {
 export type InputType = 'text' | 'password' | 'number'
 
 export type InputOutProperties<EM extends ThreeEventMap = ThreeEventMap> = Omit<TextOutProperties<EM>, 'text'> & {
+  placeholder?: string
   defaultValue?: string
   value?: string
   disabled: boolean
@@ -106,9 +112,11 @@ export class Input<
     abortableEffect(
       () =>
         void (text.value =
-          this.properties.value.type === 'password'
-            ? '*'.repeat(this.currentSignal.value.length ?? 0)
-            : this.currentSignal.value),
+          this.currentSignal.value.length === 0
+            ? (this.properties.value.placeholder ?? '')
+            : this.properties.value.type === 'password'
+              ? '*'.repeat(this.currentSignal.value.length ?? 0)
+              : this.currentSignal.value),
       this.abortSignal,
     )
 
@@ -203,7 +211,7 @@ export function setupSelectionHandlers(
       if (dragState == null || dragState.pointerId != e.pointerId) {
         return
       }
-      e.stopImmediatePropagation?.()
+      stopEvent(e)
       dragState = undefined
     }
     target.value = {
@@ -212,7 +220,7 @@ export function setupSelectionHandlers(
           return
         }
         cancelBlur(e.nativeEvent)
-        e.stopImmediatePropagation?.()
+        stopEvent(e)
         if ('setPointerCapture' in e.object && typeof e.object.setPointerCapture === 'function') {
           e.object.setPointerCapture(e.pointerId)
         }
@@ -227,7 +235,7 @@ export function setupSelectionHandlers(
         if (segmenter == null || e.uv == null || instancedTextRef.current == null) {
           return
         }
-        e.stopImmediatePropagation?.()
+        stopEvent(e)
         if (properties.peek().type === 'password') {
           setTimeout(() => focus(0, text.peek().length, 'none'))
           return
@@ -244,6 +252,12 @@ export function setupSelectionHandlers(
           segmentLengthSum += segmentLength
         }
       },
+      onClick: (e) => {
+        stopEvent(e)
+      },
+      onContextMenu: (e) => {
+        stopEvent(e)
+      },
       onPointerUp: onPointerFinish,
       onPointerLeave: onPointerFinish,
       onPointerCancel: onPointerFinish,
@@ -251,7 +265,7 @@ export function setupSelectionHandlers(
         if (dragState?.pointerId != e.pointerId || e.uv == null || instancedTextRef.current == null) {
           return
         }
-        e.stopImmediatePropagation?.()
+        stopEvent(e)
         const charIndex = uvToCharIndex(component, e.uv, instancedTextRef.current, 'between')
 
         const start = Math.min(dragState.startCharIndex, charIndex)
@@ -310,6 +324,7 @@ function setupHtmlInputElement(
   abortableEffect(() => void (element.disabled = properties.value.disabled), abortSignal)
   abortableEffect(() => void (element.tabIndex = properties.value.tabIndex), abortSignal)
   abortableEffect(() => void (element.autocomplete = properties.value.autocomplete), abortSignal)
+  abortableEffect(() => void (element.placeholder = properties.value.placeholder ?? ''), abortSignal)
   abortableEffect(() => element.setAttribute('type', properties.value.type), abortSignal)
   abortableEffect(() => element.setAttribute('type', properties.value.type), abortSignal)
 }
