@@ -1,4 +1,5 @@
 import { getOffsetToNextGlyph } from '../utils.js'
+import { getGrapheme, getNextGraphemeBreak } from '../grapheme.js'
 import { GlyphWrapper, skipWhitespace } from './index.js'
 
 export const BreakallWrapper: GlyphWrapper = (
@@ -18,10 +19,11 @@ export const BreakallWrapper: GlyphWrapper = (
   let position = 0
   let whitespaces = 0
 
-  for (; charIndex < text.length; charIndex++) {
-    const char = text[charIndex]!
+  for (; charIndex < text.length; ) {
+    const nextCharIndex = getNextGraphemeBreak(text, charIndex)
+    const char = getGrapheme(text, charIndex, nextCharIndex)
     if (char === '\n') {
-      target.charLength = charIndex - firstIndex + 1
+      target.charLength = nextCharIndex - firstIndex
       return
     }
 
@@ -29,6 +31,7 @@ export const BreakallWrapper: GlyphWrapper = (
 
     if (char === ' ') {
       whitespaces += 1
+      charIndex = nextCharIndex
       continue
     }
 
@@ -37,9 +40,10 @@ export const BreakallWrapper: GlyphWrapper = (
       break
     }
 
-    target.nonWhitespaceCharLength = charIndex - firstIndex + 1
+    target.nonWhitespaceCharLength = nextCharIndex - firstIndex
     target.nonWhitespaceWidth = position
     target.whitespacesBetween = whitespaces
+    charIndex = nextCharIndex
   }
 
   //not "+1" because we break when we want to remove the last one

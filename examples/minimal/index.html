@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Minimal UIKit Test</title>
 </head>
-<body style="margin: 0; overflow: hidden;">
+<body style="margin: 0; overflow: hidden; background: #020617;">
     <div id="renderer-toggle" style="position:fixed;top:8px;right:8px;z-index:9999;font-family:monospace;font-size:12px;background:rgba(0,0,0,0.7);padding:4px 8px;border-radius:4px;">
         <a id="r-webgl" href="?renderer=webgl" style="color:#4fc3f7;text-decoration:none;">WebGL</a>
         <span style="color:#888;">|</span>
@@ -19,6 +19,6 @@
         }()
     </script>
     <script type="module" src="./index.ts"></script>
-    <canvas style="width: 100dvw; height: 100dvh;" id="root"></canvas>
+    <canvas style="width: 100dvw; height: 100dvh; display: block; background: #020617;" id="root"></canvas>
 </body>
 </html>
