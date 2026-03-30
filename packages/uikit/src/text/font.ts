@@ -452,18 +452,17 @@ const bitmapColorFontStack =
 
 const extendedPictographicRegex = createExtendedPictographicRegex()
 
-let bitmapAlphaFallbackFont: BitmapFallbackFont | undefined
-let bitmapColorFallbackFont: BitmapFallbackFont | undefined
+let bitmapAlphaFallbackFont: BitmapFallbackFontSet | undefined
+let bitmapColorFallbackFont: BitmapFallbackFontSet | undefined
 
 function getBitmapFallbackGlyph(char: string): ResolvedGlyph | undefined {
   if (typeof document === 'undefined' || char.length === 0 || char === '\n') {
     return undefined
   }
-  const font = shouldUseColorBitmapFallback(char)
-    ? (bitmapColorFallbackFont ??= new BitmapFallbackFont('bitmap-color'))
-    : (bitmapAlphaFallbackFont ??= new BitmapFallbackFont('bitmap-alpha'))
-  const glyphInfo = font.ensureGlyph(char)
-  return glyphInfo == null ? undefined : { font, glyphInfo }
+  const fontSet = shouldUseColorBitmapFallback(char)
+    ? (bitmapColorFallbackFont ??= new BitmapFallbackFontSet('bitmap-color'))
+    : (bitmapAlphaFallbackFont ??= new BitmapFallbackFontSet('bitmap-alpha'))
+  return fontSet.resolveGlyph(char)
 }
 
 function shouldUseColorBitmapFallback(char: string): boolean {
@@ -475,6 +474,51 @@ function createExtendedPictographicRegex() {
     return new RegExp('\\p{Extended_Pictographic}', 'u')
   } catch {
     return undefined
+  }
+}
+
+class BitmapFallbackFontSet {
+  private readonly pages = new Array<BitmapFallbackFont>()
+  private readonly glyphCache = new Map<string, ResolvedGlyph>()
+
+  constructor(private readonly renderMode: Exclude<FontRenderMode, 'msdf'>) {
+    this.pages.push(new BitmapFallbackFont(renderMode))
+  }
+
+  resolveGlyph(char: string): ResolvedGlyph | undefined {
+    const cached = this.glyphCache.get(char)
+    if (cached != null) {
+      return cached
+    }
+
+    for (const page of this.pages) {
+      const glyphInfo = page.getOptionalGlyphInfo(char)
+      if (glyphInfo == null) {
+        continue
+      }
+      const glyph = { font: page, glyphInfo }
+      this.glyphCache.set(char, glyph)
+      return glyph
+    }
+
+    let page = this.pages[this.pages.length - 1]!
+    let glyphInfo = page.tryAddGlyph(char)
+    if (glyphInfo == null) {
+      page = new BitmapFallbackFont(this.renderMode)
+      this.pages.push(page)
+      glyphInfo = page.tryAddGlyph(char)
+    }
+    if (glyphInfo == null) {
+      const questionmarkGlyph = this.pages[0]!.getOptionalGlyphInfo('?')
+      if (questionmarkGlyph == null) {
+        return undefined
+      }
+      return { font: this.pages[0]!, glyphInfo: questionmarkGlyph }
+    }
+
+    const glyph = { font: page, glyphInfo }
+    this.glyphCache.set(char, glyph)
+    return glyph
   }
 }
 
@@ -508,14 +552,14 @@ class BitmapFallbackFont extends Font {
     context.textRendering = 'optimizeLegibility'
     this.context = context
 
-    const questionmark = this.ensureGlyph('?')
+    const questionmark = this.tryAddGlyph('?')
     if (questionmark != null) {
       this.setQuestionmarkGlyphInfo(questionmark)
     }
-    this.ensureGlyph(' ')
+    this.tryAddGlyph(' ')
   }
 
-  ensureGlyph(char: string): GlyphInfo | undefined {
+  tryAddGlyph(char: string): GlyphInfo | undefined {
     const existing = this.getOptionalGlyphInfo(char)
     if (existing != null) {
       return existing
@@ -525,7 +569,7 @@ class BitmapFallbackFont extends Font {
       this.renderMode === 'bitmap-color' ? this.measureColorGlyph(char) : this.measureAlphaGlyph(char)
     const slot = this.allocateSlot(metrics.width, metrics.height)
     if (slot == null) {
-      return this.getOptionalGlyphInfo('?')
+      return undefined
     }
 
     this.context.clearRect(slot.x - bitmapPadding, slot.y - bitmapPadding, slot.width, slot.height)
