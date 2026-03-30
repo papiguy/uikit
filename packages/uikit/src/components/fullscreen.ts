@@ -1,5 +1,16 @@
-import { OrthographicCamera, PerspectiveCamera, Vector2 } from 'three'
+import type { OrthographicCamera, PerspectiveCamera } from 'three'
+import { Vector2 } from 'three'
 import type { RendererLike } from '../renderer-types.js'
+
+// Use Three.js prototype flags instead of instanceof for cross-module safety.
+// When the host app imports from 'three/webgpu' and UIKit imports from 'three',
+// instanceof fails because the class objects differ. Prototype flags are always present.
+function isPerspectiveCamera(obj: any): obj is PerspectiveCamera {
+  return obj != null && obj.isPerspectiveCamera === true
+}
+function isOrthographicCamera(obj: any): obj is OrthographicCamera {
+  return obj != null && obj.isOrthographicCamera === true
+}
 import { batch, Signal, signal } from '@preact/signals-core'
 import { ThreeEventMap } from '../events.js'
 import { Container } from './container.js'
@@ -64,18 +75,18 @@ export class Fullscreen<
   update(delta: number) {
     super.update(delta)
     const camera = this.parent
-    if (!(camera instanceof PerspectiveCamera || camera instanceof OrthographicCamera)) {
+    if (!(isPerspectiveCamera(camera) || isOrthographicCamera(camera))) {
       throw new Error(`fullscreen can only be added to a camera`)
     }
     const distanceToCamera = this.properties.peek().distanceToCamera ?? camera.near + 0.1
     batch(() => {
-      if (camera instanceof PerspectiveCamera) {
+      if (isPerspectiveCamera(camera)) {
         const cameraHeight = 2 * Math.tan((Math.PI * camera.fov) / 360) * distanceToCamera!
         this.pixelSize.value = cameraHeight / this.renderer.getSize(vectorHelper).y
         this.sizeY.value = cameraHeight
         this.sizeX.value = cameraHeight * camera.aspect
       }
-      if (camera instanceof OrthographicCamera) {
+      if (isOrthographicCamera(camera)) {
         const cameraHeight = (camera.top - camera.bottom) / camera.zoom
         const cameraWidth = (camera.right - camera.left) / camera.zoom
         this.pixelSize.value = cameraHeight / this.renderer.getSize(vectorHelper).y
