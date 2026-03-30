@@ -1,4 +1,5 @@
 import type { GlyphLayoutLine, GlyphOutProperties } from '../layout.js'
+import { getGrapheme, getNextGraphemeBreak } from '../grapheme.js'
 
 export type GlyphWrapper = (
   properties: GlyphOutProperties,
@@ -9,8 +10,12 @@ export type GlyphWrapper = (
 
 export function skipWhitespace(text: string, index: number): number {
   const textLength = text.length
-  while (text[index] === ' ' && index < textLength) {
-    index++
+  while (index < textLength) {
+    const nextIndex = getNextGraphemeBreak(text, index)
+    if (getGrapheme(text, index, nextIndex) !== ' ') {
+      break
+    }
+    index = nextIndex
   }
   return index
 }

@@ -9,6 +9,8 @@ export class InstancedGlyphMaterial extends MeshBasicMaterial {
       toneMapped: false,
     })
 
+    this.customProgramCacheKey = () => `uikit-glyph-${font.renderMode}`
+
     this.onBeforeCompile = (parameters, renderer) => {
       font.page.anisotropy = renderer.capabilities.getMaxAnisotropy()
       parameters.uniforms.fontPage = { value: font.page }
@@ -49,7 +51,8 @@ export class InstancedGlyphMaterial extends MeshBasicMaterial {
         ` + parameters.fragmentShader
       parameters.fragmentShader = parameters.fragmentShader.replace(
         '#include <map_fragment>',
-        ` #include <map_fragment>
+        font.renderMode === 'msdf'
+          ? ` #include <map_fragment>
           vec4 plane;
           float distanceToPlane, distanceGradient;
           float clipOpacity = 1.0;
@@ -61,26 +64,49 @@ export class InstancedGlyphMaterial extends MeshBasicMaterial {
 
             if ( clipOpacity == 0.0 ) discard;
           }
-          // Distance to the edge of the glyph in texels.
           float dist = (getDistance() - 0.5) * float(distanceRange);
-
-          // Calculate the antialiasing distance based on the number of texels per screen pixel.
           float aaDist = length(fwidth(fontUv * pageSize)) * 0.5;
-
-          // Clamp the antialiasing distance to avoid excessive blurring.
           aaDist = clamp(aaDist, 0.0, float(distanceRange) * 0.5);
-
           float alpha = smoothstep(-aaDist, aaDist, dist);
 
           if (alpha <= 0.0) discard;
 
-          // Apply gamma correction to improve text appearance.
           float gamma = 1.3;
           alpha = pow(alpha, 1.0 / gamma);
 
           diffuseColor.a *= clipOpacity * alpha;
-          diffuseColor *= rgba;
-            `,
+          diffuseColor *= rgba;`
+          : font.renderMode === 'bitmap-color'
+            ? `#include <map_fragment>
+          vec4 plane;
+          float distanceToPlane, distanceGradient;
+          float clipOpacity = 1.0;
+          for(int i = 0; i < 4; i++) {
+            plane = clipping[ i ];
+            distanceToPlane = dot( localPosition, plane.xyz ) + plane.w;
+            distanceGradient = fwidth( distanceToPlane ) / 2.0;
+            clipOpacity *= smoothstep( - distanceGradient, distanceGradient, distanceToPlane );
+
+            if ( clipOpacity == 0.0 ) discard;
+          }
+          vec4 sampled = texture(fontPage, fontUv);
+          if (sampled.a <= 0.0) discard;
+          diffuseColor = vec4(sampled.rgb, sampled.a * rgba.a * clipOpacity);`
+            : `#include <map_fragment>
+          vec4 plane;
+          float distanceToPlane, distanceGradient;
+          float clipOpacity = 1.0;
+          for(int i = 0; i < 4; i++) {
+            plane = clipping[ i ];
+            distanceToPlane = dot( localPosition, plane.xyz ) + plane.w;
+            distanceGradient = fwidth( distanceToPlane ) / 2.0;
+            clipOpacity *= smoothstep( - distanceGradient, distanceGradient, distanceToPlane );
+
+            if ( clipOpacity == 0.0 ) discard;
+          }
+          vec4 sampled = texture(fontPage, fontUv);
+          if (sampled.a <= 0.0) discard;
+          diffuseColor = vec4(rgba.rgb, sampled.a * rgba.a * clipOpacity);`,
       )
     }
   }
