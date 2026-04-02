@@ -37,6 +37,8 @@ export function computedIsVisible(
   return computed(
     () =>
       component.displayed.value &&
+      component.explicitVisible.value &&
+      (component.parentContainer.value?.isVisible.value ?? true) &&
       (isClipped == null || !isClipped?.value) &&
       properties.value.visibility === 'visible',
   )

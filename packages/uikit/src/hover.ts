@@ -3,6 +3,15 @@ import { EventHandlers } from './events.js'
 import { Properties } from './properties/index.js'
 import { addHandler } from './utils.js'
 
+/**
+ * Backward-compatible conditional helper used by precedence tests and older integrations.
+ */
+export function createHoverPropertyTransformers(hoveredSignal: Signal<Array<number>>) {
+  return {
+    hover: () => hoveredSignal.value.length > 0,
+  }
+}
+
 export function setupCursorCleanup(hoveredSignal: Signal<Array<number>>, abortSignal: AbortSignal) {
   //cleanup cursor effect
   abortSignal.addEventListener('abort', () => unsetCursorType(hoveredSignal))

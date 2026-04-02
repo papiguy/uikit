@@ -74,6 +74,7 @@ export class Component<
   readonly borderInset = signal<Inset | undefined>(undefined)
   readonly overflow = signal<Overflow>(Overflow.Visible)
   readonly displayed = signal<boolean>(false)
+  readonly explicitVisible = signal<boolean>(true)
   readonly scrollable = signal<[boolean, boolean]>([false, false])
   readonly paddingInset = signal<Inset | undefined>(undefined)
   readonly maxScrollPosition = signal<Partial<Vector2Tuple>>([undefined, undefined])
@@ -86,6 +87,7 @@ export class Component<
   readonly globalPanelMatrix: Signal<Matrix4 | undefined>
   readonly abortSignal = this.abortController.signal
   readonly classList: ClassList
+  private readonly renderVisible = signal<boolean>(true)
 
   // Pointer event properties (assigned by setupPointerEvents in utils.ts)
   defaultPointerEvents?: 'none' | 'auto' | 'listener'
@@ -114,6 +116,16 @@ export class Component<
   ) {
     super(panelGeometry, config?.material)
     this.matrixAutoUpdate = false
+    const initialVisible = this.visible
+    this.explicitVisible.value = initialVisible
+    Object.defineProperty(this, 'visible', {
+      configurable: true,
+      enumerable: true,
+      get: () => this.explicitVisible.value && this.renderVisible.value,
+      set: (value: boolean) => {
+        this.explicitVisible.value = value
+      },
+    })
 
     //setting up the parent signal
     const updateParentState = () => {
@@ -347,6 +359,13 @@ export class Component<
   dispose(): void {
     console.log('dispose')
     this.abortController.abort()
+  }
+
+  protected setRenderVisible(visible: boolean): void {
+    if (this.renderVisible.peek() === visible) {
+      return
+    }
+    this.renderVisible.value = visible
   }
 }
 

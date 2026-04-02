@@ -163,7 +163,7 @@ export class Content<
     this.clippingPlanes = createGlobalClippingPlanes(this)
 
     abortableEffect(() => {
-      this.visible = this.isVisible.value
+      this.setRenderVisible(this.isVisible.value)
       applyAppearancePropertiesToGroup(
         this.properties,
         this,
