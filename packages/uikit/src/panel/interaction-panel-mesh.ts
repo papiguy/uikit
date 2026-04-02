@@ -101,6 +101,11 @@ export function makeClippedCast<T extends Mesh['raycast'] | SpherecastFn>(
   orderInfoSignal: Signal<OrderInfo | undefined>,
 ) {
   return (raycaster: Parameters<T>[0], intersects: Parameters<T>[1]): unknown => {
+    // Hidden/clipped UI elements should never produce pointer intersections.
+    if (!component.isVisible.peek()) {
+      return false
+    }
+
     const oldLength = intersects.length
     const fnResult = (fn as any).call(component, raycaster, intersects)
     if (oldLength === intersects.length) {

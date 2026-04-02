@@ -73,7 +73,7 @@ export class Custom<
     setupMatrixWorldUpdate(this, this.root, this.globalPanelMatrix, this.abortSignal)
 
     abortableEffect(() => {
-      this.visible = this.isVisible.value
+      this.setRenderVisible(this.isVisible.value)
       this.root.peek().requestRender?.()
     }, this.abortSignal)
   }

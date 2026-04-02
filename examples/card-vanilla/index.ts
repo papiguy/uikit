@@ -83,7 +83,8 @@ const headerImage = new Container({
   width: '100%',
   height: 280,
   backgroundColor: 0x6366f1,
-  borderTopRadius: 20,
+  borderRadius: 20,
+  borderBottomRadius: 0,
   alignItems: 'center',
   justifyContent: 'center',
   flexDirection: 'column',
@@ -114,7 +115,8 @@ const infoBar = new Container({
   paddingTop: 32,
   alignItems: 'center',
   justifyContent: 'space-between',
-  borderBottomRadius: 20,
+  borderRadius: 20,
+  borderTopRadius: 0,
 })
 mainCard.add(infoBar)
 

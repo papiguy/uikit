@@ -37,6 +37,8 @@ export function computedIsVisible(
   return computed(
     () =>
       component.displayed.value &&
+      component.explicitVisible.value &&
+      (component.parentContainer.value?.isVisible.value ?? true) &&
       (isClipped == null || !isClipped?.value) &&
       properties.value.visibility === 'visible',
   )
@@ -212,7 +214,7 @@ export function setupPointerEvents(component: Component, canHaveNonUikitChildren
     const rootComponent = component.root.value.component
     component.intersectChildren = canHaveNonUikitChildren || rootComponent === component
 
-    if (!canHaveNonUikitChildren && component.properties.value.pointerEvents === 'none') {
+    if (component.properties.value.pointerEvents === 'none') {
       return
     }
     if (rootComponent === component) {

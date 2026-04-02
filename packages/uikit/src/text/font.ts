@@ -1,5 +1,5 @@
 import { Signal, computed, effect, signal } from '@preact/signals-core'
-import { Texture, TypedArray } from 'three'
+import { CanvasTexture, LinearFilter, SRGBColorSpace, Texture, TypedArray } from 'three'
 import { loadCachedFont } from './cache.js'
 import { Properties } from '../properties/index.js'
 import { inter } from '@ni2khanna/msdfonts'
@@ -293,52 +293,69 @@ export type GlyphInfo = {
   uvY?: number
 }
 
+export type FontRenderMode = 'msdf' | 'bitmap-alpha' | 'bitmap-color'
+
 export class Font {
   private glyphInfoMap = new Map<string, GlyphInfo>()
   private kerningMap = new Map<string, number>()
 
-  private questionmarkGlyphInfo: GlyphInfo
+  private questionmarkGlyphInfo: GlyphInfo | undefined
 
   //needed in the shader:
   public readonly pageWidth: number
   public readonly pageHeight: number
   public readonly distanceRange: number
+  public readonly renderMode: FontRenderMode
 
   constructor(
     info: FontInfo,
     public page: Texture,
+    renderMode: FontRenderMode = 'msdf',
   ) {
     const { scaleW, scaleH, lineHeight } = info.common
 
     this.pageWidth = scaleW
     this.pageHeight = scaleH
     this.distanceRange = info.distanceField.distanceRange
+    this.renderMode = renderMode
 
     const { size } = info.info
 
     for (const glyph of info.chars) {
-      glyph.uvX = glyph.x / scaleW
-      glyph.uvY = glyph.y / scaleH
-      glyph.uvWidth = glyph.width / scaleW
-      glyph.uvHeight = glyph.height / scaleH
-      glyph.width /= size
-      glyph.height /= size
-      glyph.xadvance /= size
-      glyph.xoffset /= size
-      glyph.yoffset -= lineHeight - size
-      glyph.yoffset /= size
-      this.glyphInfoMap.set(glyph.char, glyph)
+      this.registerGlyphInfo(glyph, size, lineHeight)
     }
 
     for (const { first, second, amount } of info.kernings) {
       this.kerningMap.set(`${first}/${second}`, amount / size)
     }
 
-    const questionmarkGlyphInfo = this.glyphInfoMap.get('?')
-    if (questionmarkGlyphInfo == null) {
-      throw new Error("missing '?' glyph in font")
+    this.questionmarkGlyphInfo = this.glyphInfoMap.get('?') ?? this.glyphInfoMap.get(' ')
+  }
+
+  protected registerGlyphInfo(glyph: GlyphInfo, size: number, lineHeight: number): GlyphInfo {
+    glyph.uvX = glyph.x / this.pageWidth
+    glyph.uvY = glyph.y / this.pageHeight
+    glyph.uvWidth = glyph.width / this.pageWidth
+    glyph.uvHeight = glyph.height / this.pageHeight
+    glyph.width /= size
+    glyph.height /= size
+    glyph.xadvance /= size
+    glyph.xoffset /= size
+    glyph.yoffset -= lineHeight - size
+    glyph.yoffset /= size
+    this.glyphInfoMap.set(glyph.char, glyph)
+    if (glyph.char === '?') {
+      this.questionmarkGlyphInfo = glyph
     }
-    this.questionmarkGlyphInfo = questionmarkGlyphInfo
+    return glyph
+  }
+
+  protected registerKerning(firstId: number, secondId: number, amount: number, size: number): void {
+    this.kerningMap.set(`${firstId}/${secondId}`, amount / size)
+  }
+
+  protected setQuestionmarkGlyphInfo(glyph: GlyphInfo): void {
+    this.questionmarkGlyphInfo = glyph
   }
 
   hasGlyph(char: string): boolean {
@@ -350,11 +367,14 @@ export class Font {
   }
 
   getGlyphInfo(char: string): GlyphInfo {
-    return (
+    const glyph =
       this.glyphInfoMap.get(char) ??
       (char == '\n' ? this.glyphInfoMap.get(' ') : this.questionmarkGlyphInfo) ??
-      this.questionmarkGlyphInfo
-    )
+      this.glyphInfoMap.get(' ')
+    if (glyph == null) {
+      throw new Error(`missing glyph "${char}" in font`)
+    }
+    return glyph
   }
 
   getKerning(firstId: number, secondId: number): number {
@@ -399,6 +419,7 @@ export class ResolvedFontFamily {
       }
     }
 
+    glyph ??= getBitmapFallbackGlyph(char)
     glyph ??= { font: this.primaryFont, glyphInfo: this.primaryFont.getGlyphInfo(char) }
     this.glyphCache.set(char, glyph)
     return glyph
@@ -417,4 +438,265 @@ export function glyphIntoToUV(info: GlyphInfo, target: TypedArray, offset: numbe
   target[offset + 1] = info.uvY! + info.uvHeight!
   target[offset + 2] = info.uvWidth!
   target[offset + 3] = -info.uvHeight!
+}
+
+const bitmapAtlasSize = 2048
+const bitmapEmSize = 128
+const bitmapPadding = 16
+const bitmapColorFontSize = 112
+const bitmapMinGlyphWidth = Math.ceil(bitmapEmSize * 0.35)
+const bitmapAlphaFontStack =
+  'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+const bitmapColorFontStack =
+  '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", system-ui, sans-serif'
+
+const extendedPictographicRegex = createExtendedPictographicRegex()
+
+let bitmapAlphaFallbackFont: BitmapFallbackFontSet | undefined
+let bitmapColorFallbackFont: BitmapFallbackFontSet | undefined
+
+function getBitmapFallbackGlyph(char: string): ResolvedGlyph | undefined {
+  if (typeof document === 'undefined' || char.length === 0 || char === '\n') {
+    return undefined
+  }
+  const fontSet = shouldUseColorBitmapFallback(char)
+    ? (bitmapColorFallbackFont ??= new BitmapFallbackFontSet('bitmap-color'))
+    : (bitmapAlphaFallbackFont ??= new BitmapFallbackFontSet('bitmap-alpha'))
+  return fontSet.resolveGlyph(char)
+}
+
+function shouldUseColorBitmapFallback(char: string): boolean {
+  return extendedPictographicRegex?.test(char) ?? Array.from(char).some((entry) => (entry.codePointAt(0) ?? 0) >= 0x1f000)
+}
+
+function createExtendedPictographicRegex() {
+  try {
+    return new RegExp('\\p{Extended_Pictographic}', 'u')
+  } catch {
+    return undefined
+  }
+}
+
+class BitmapFallbackFontSet {
+  private readonly pages = new Array<BitmapFallbackFont>()
+  private readonly glyphCache = new Map<string, ResolvedGlyph>()
+
+  constructor(private readonly renderMode: Exclude<FontRenderMode, 'msdf'>) {
+    this.pages.push(new BitmapFallbackFont(renderMode))
+  }
+
+  resolveGlyph(char: string): ResolvedGlyph | undefined {
+    const cached = this.glyphCache.get(char)
+    if (cached != null) {
+      return cached
+    }
+
+    for (const page of this.pages) {
+      const glyphInfo = page.getOptionalGlyphInfo(char)
+      if (glyphInfo == null) {
+        continue
+      }
+      const glyph = { font: page, glyphInfo }
+      this.glyphCache.set(char, glyph)
+      return glyph
+    }
+
+    let page = this.pages[this.pages.length - 1]!
+    let glyphInfo = page.tryAddGlyph(char)
+    if (glyphInfo == null) {
+      page = new BitmapFallbackFont(this.renderMode)
+      this.pages.push(page)
+      glyphInfo = page.tryAddGlyph(char)
+    }
+    if (glyphInfo == null) {
+      const questionmarkGlyph = this.pages[0]!.getOptionalGlyphInfo('?')
+      if (questionmarkGlyph == null) {
+        return undefined
+      }
+      return { font: this.pages[0]!, glyphInfo: questionmarkGlyph }
+    }
+
+    const glyph = { font: page, glyphInfo }
+    this.glyphCache.set(char, glyph)
+    return glyph
+  }
+}
+
+class BitmapFallbackFont extends Font {
+  private readonly context: CanvasRenderingContext2D
+  private nextGlyphId = 1
+  private nextX = 0
+  private nextY = 0
+  private rowHeight = 0
+
+  constructor(renderMode: Exclude<FontRenderMode, 'msdf'>) {
+    const canvas = document.createElement('canvas')
+    canvas.width = bitmapAtlasSize
+    canvas.height = bitmapAtlasSize
+    const texture = new CanvasTexture(canvas)
+    texture.flipY = false
+    texture.minFilter = LinearFilter
+    texture.magFilter = LinearFilter
+    if (renderMode === 'bitmap-color') {
+      texture.colorSpace = SRGBColorSpace
+    }
+
+    super(createBitmapFontInfo(), texture, renderMode)
+
+    const context = canvas.getContext('2d')
+    if (context == null) {
+      throw new Error('failed to initialize bitmap fallback font canvas')
+    }
+    context.clearRect(0, 0, canvas.width, canvas.height)
+    context.imageSmoothingEnabled = true
+    context.textRendering = 'optimizeLegibility'
+    this.context = context
+
+    const questionmark = this.tryAddGlyph('?')
+    if (questionmark != null) {
+      this.setQuestionmarkGlyphInfo(questionmark)
+    }
+    this.tryAddGlyph(' ')
+  }
+
+  tryAddGlyph(char: string): GlyphInfo | undefined {
+    const existing = this.getOptionalGlyphInfo(char)
+    if (existing != null) {
+      return existing
+    }
+
+    const metrics =
+      this.renderMode === 'bitmap-color' ? this.measureColorGlyph(char) : this.measureAlphaGlyph(char)
+    const slot = this.allocateSlot(metrics.width, metrics.height)
+    if (slot == null) {
+      return undefined
+    }
+
+    this.context.clearRect(slot.x - bitmapPadding, slot.y - bitmapPadding, slot.width, slot.height)
+    if (this.renderMode === 'bitmap-color') {
+      this.drawColorGlyph(char, slot.x, slot.y, metrics.width, metrics.height)
+    } else {
+      this.drawAlphaGlyph(char, slot.x, slot.y, metrics.height)
+    }
+
+    const glyph = this.registerGlyphInfo(
+      {
+        id: this.nextGlyphId,
+        index: this.nextGlyphId,
+        char,
+        width: metrics.width,
+        height: metrics.height,
+        x: slot.x,
+        y: slot.y,
+        xoffset: 0,
+        yoffset: 0,
+        xadvance: metrics.advance,
+        chnl: 0,
+        page: 0,
+      },
+      bitmapEmSize,
+      bitmapEmSize,
+    )
+    this.nextGlyphId += 1
+    this.page.needsUpdate = true
+    return glyph
+  }
+
+  private measureColorGlyph(char: string) {
+    this.context.font = `${bitmapColorFontSize}px ${bitmapColorFontStack}`
+    const measuredWidth = Math.ceil(this.context.measureText(char).width)
+    const width = Math.min(bitmapEmSize, Math.max(bitmapMinGlyphWidth, measuredWidth || bitmapEmSize))
+    return { width, height: bitmapEmSize, advance: width }
+  }
+
+  private measureAlphaGlyph(char: string) {
+    this.context.font = `${bitmapEmSize}px ${bitmapAlphaFontStack}`
+    const measuredWidth = Math.ceil(this.context.measureText(char).width)
+    const width = Math.min(bitmapEmSize, Math.max(bitmapMinGlyphWidth, measuredWidth || bitmapEmSize))
+    return { width, height: bitmapEmSize, advance: width }
+  }
+
+  private drawColorGlyph(char: string, x: number, y: number, width: number, height: number): void {
+    this.context.save()
+    this.context.font = `${bitmapColorFontSize}px ${bitmapColorFontStack}`
+    this.context.textAlign = 'center'
+    this.context.textBaseline = 'middle'
+    this.context.fillStyle = '#ffffff'
+    this.context.fillText(char, x + width / 2, y + height / 2 + 1)
+    this.context.restore()
+  }
+
+  private drawAlphaGlyph(char: string, x: number, y: number, height: number): void {
+    this.context.save()
+    this.context.font = `${bitmapEmSize}px ${bitmapAlphaFontStack}`
+    this.context.textAlign = 'left'
+    this.context.textBaseline = 'middle'
+    this.context.fillStyle = '#ffffff'
+    this.context.fillText(char, x, y + height / 2)
+    this.context.restore()
+  }
+
+  private allocateSlot(contentWidth: number, contentHeight: number) {
+    const width = contentWidth + bitmapPadding * 2
+    const height = contentHeight + bitmapPadding * 2
+
+    if (this.nextX + width > bitmapAtlasSize) {
+      this.nextX = 0
+      this.nextY += this.rowHeight
+      this.rowHeight = 0
+    }
+
+    if (this.nextY + height > bitmapAtlasSize) {
+      return undefined
+    }
+
+    const slot = {
+      x: this.nextX + bitmapPadding,
+      y: this.nextY + bitmapPadding,
+      width,
+      height,
+    }
+
+    this.nextX += width
+    this.rowHeight = Math.max(this.rowHeight, height)
+    return slot
+  }
+}
+
+function createBitmapFontInfo(): FontInfo {
+  return {
+    pages: [''],
+    chars: [],
+    info: {
+      face: 'bitmap-fallback',
+      size: bitmapEmSize,
+      bold: 0,
+      italic: 0,
+      charset: [],
+      unicode: 1,
+      stretchH: 100,
+      smooth: 1,
+      aa: 1,
+      padding: [0, 0, 0, 0],
+      spacing: [0, 0],
+      outline: 0,
+    },
+    common: {
+      lineHeight: bitmapEmSize,
+      base: bitmapEmSize,
+      scaleW: bitmapAtlasSize,
+      scaleH: bitmapAtlasSize,
+      pages: 1,
+      packed: 0,
+      alphaChnl: 0,
+      redChnl: 0,
+      greenChnl: 0,
+      blueChnl: 0,
+    },
+    distanceField: {
+      fieldType: 'bitmap',
+      distanceRange: 1,
+    },
+    kernings: [],
+  }
 }

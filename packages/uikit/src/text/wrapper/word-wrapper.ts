@@ -1,4 +1,5 @@
 import { getOffsetToNextGlyph } from '../utils.js'
+import { getGrapheme, getNextGraphemeBreak } from '../grapheme.js'
 import { GlyphWrapper, skipWhitespace } from './index.js'
 
 export const WordWrapper: GlyphWrapper = (
@@ -17,10 +18,11 @@ export const WordWrapper: GlyphWrapper = (
 
   let position = 0
   let whitespaces = 0
-  for (; charIndex < text.length; charIndex++) {
-    const char = text[charIndex]!
+  for (; charIndex < text.length; ) {
+    const nextCharIndex = getNextGraphemeBreak(text, charIndex)
+    const char = getGrapheme(text, charIndex, nextCharIndex)
     if (char === '\n') {
-      target.charLength = charIndex - firstIndex + 1
+      target.charLength = nextCharIndex - firstIndex
       break
     }
 
@@ -28,7 +30,8 @@ export const WordWrapper: GlyphWrapper = (
 
     if (char === ' ') {
       whitespaces += 1
-      target.charLength = charIndex - firstIndex + 1
+      target.charLength = nextCharIndex - firstIndex
+      charIndex = nextCharIndex
       continue
     }
 
@@ -37,13 +40,14 @@ export const WordWrapper: GlyphWrapper = (
       break
     }
 
-    const nextChar = text[charIndex + 1]
+    const nextChar = text[nextCharIndex]
     if (nextChar === ' ' || nextChar === '\n' || nextChar == null) {
       //next char is a whitespace/end of text => save point
-      target.charLength = charIndex - firstIndex + 1
+      target.charLength = nextCharIndex - firstIndex
       target.nonWhitespaceCharLength = target.charLength
       target.nonWhitespaceWidth = position
       target.whitespacesBetween = whitespaces
     }
+    charIndex = nextCharIndex
   }
 }

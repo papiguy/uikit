@@ -164,6 +164,12 @@ function disposeSvg(result: Awaited<ReturnType<typeof loadSvg>>) {
 async function loadSvgContent(src: string) {
   let promise = svgCache.get(src)
   if (promise == null) {
+    const dataUrlContent = decodeSvgDataUrl(src)
+    if (dataUrlContent != null) {
+      promise = Promise.resolve(preprocessSvgContent(dataUrlContent))
+      svgCache.set(src, promise)
+      return promise
+    }
     svgCache.set(
       src,
       (promise = fetch(src)
@@ -172,6 +178,45 @@ async function loadSvgContent(src: string) {
     )
   }
   return promise
+}
+
+function decodeSvgDataUrl(src: string): string | undefined {
+  if (!src.startsWith('data:')) {
+    return undefined
+  }
+
+  const commaIndex = src.indexOf(',')
+  if (commaIndex === -1) {
+    return undefined
+  }
+
+  const meta = src.slice(5, commaIndex)
+  if (!meta.toLowerCase().startsWith('image/svg+xml')) {
+    return undefined
+  }
+
+  const payload = src.slice(commaIndex + 1)
+  const isBase64 = /;base64/i.test(meta)
+
+  if (isBase64) {
+    try {
+      if (typeof atob === 'function') {
+        return atob(payload)
+      }
+      if (typeof Buffer !== 'undefined') {
+        return Buffer.from(payload, 'base64').toString('utf8')
+      }
+    } catch {
+      return undefined
+    }
+    return undefined
+  }
+
+  try {
+    return decodeURIComponent(payload)
+  } catch {
+    return payload
+  }
 }
 
 function createSvgMaterial(color: ColorRepresentation, opacity: number) {

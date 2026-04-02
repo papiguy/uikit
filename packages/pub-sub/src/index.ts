@@ -47,6 +47,7 @@ export class PropertiesImplementation<In, Out extends object> implements Propert
     ) => void,
     private readonly defaults?: Out,
     private readonly onLayerIndicesChanged?: () => void,
+    private readonly compareEntries?: (a: [string, unknown], b: [string, unknown]) => number,
   ) {
     this.propertyKeys = defaults == null ? [] : (Array.from(Object.keys(defaults)) as Array<keyof Out>)
   }
@@ -98,6 +99,9 @@ export class PropertiesImplementation<In, Out extends object> implements Propert
       }
       this.propertiesLayers.set(index, (layer = {} as Record<keyof Out, any>))
       const entries = Object.entries(value as any)
+      if (this.compareEntries != null) {
+        entries.sort(this.compareEntries)
+      }
       for (const [key, value] of entries) {
         this.apply(key as keyof In, value as In[keyof In], this.setProperty.bind(this, layer, index), index)
       }

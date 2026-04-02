@@ -1,6 +1,36 @@
-import { PerspectiveCamera, Scene, WebGLRenderer } from 'three'
-import { reversePainterSortStable, Container, Text, Input, Fullscreen, initNodeMaterials, initGlyphNodeMaterials } from '@ni2khanna/uikit'
+import { Color, PerspectiveCamera, Scene, WebGLRenderer } from 'three'
+import {
+  reversePainterSortStable,
+  Container,
+  Text,
+  Input,
+  Fullscreen,
+  initNodeMaterials,
+  initGlyphNodeMaterials,
+} from '@ni2khanna/uikit'
+import type { RendererLike } from '@ni2khanna/uikit'
 import { forwardHtmlEvents } from '@pmndrs/pointer-events'
+
+type ExampleRenderer = RendererLike & {
+  localClippingEnabled: boolean
+  setSize(width: number, height: number): void
+  setPixelRatio(value: number): void
+  setAnimationLoop(callback: (time: number) => void): void
+}
+
+const emojiCharacters = [
+  '😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '😊', '😇',
+  '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘', '😗', '😙', '😚',
+  '😋', '😛', '😝', '😜', '🤪', '🤨', '🧐', '🤓', '😎', '🤩',
+  '🥳', '😏', '😒', '😞', '😔', '😟', '😕', '🙁', '☹️', '😣',
+  '😖', '😫', '😩', '🥺', '😢', '😭', '😤', '😠', '😡', '🤬',
+  '🤯', '😳', '🥵', '🥶', '😱', '😨', '😰', '😥', '😓', '🤗',
+  '🤔', '🤭', '🤫', '🤥', '😶', '😐', '😑', '😬', '🙄', '😯',
+  '😦', '😧', '😮', '😲', '🥱', '😴', '🤤', '😪', '😵', '🤐',
+  '🥴', '🤢', '🤮', '🤧', '😷', '🤒', '🤕', '🤑', '🤠', '😈',
+].join(' ')
+
+const appBackgroundColor = 0x020617
 
 async function createRenderer(canvas: HTMLCanvasElement) {
   const params = new URLSearchParams(window.location.search)
@@ -19,23 +49,39 @@ const camera = new PerspectiveCamera(70, 1, 0.01, 100)
 camera.position.z = 5
 
 const scene = new Scene()
+scene.background = new Color(appBackgroundColor)
 scene.add(camera)
 
 const { update } = forwardHtmlEvents(canvas, camera, scene)
 
-const renderer = await createRenderer(canvas)
+const renderer = (await createRenderer(canvas)) as ExampleRenderer
 renderer.localClippingEnabled = true
 renderer.setTransparentSort(reversePainterSortStable)
 
 // UI root
 const root = new Fullscreen(renderer, {
-  flexDirection: 'column',
-  gap: 16,
-  padding: 40,
-  alignItems: 'center',
+  flexDirection: 'row',
+  gap: 24,
+  padding: 32,
+  alignItems: 'flex-start',
   justifyContent: 'center',
+  overflow: 'scroll',
 })
 camera.add(root)
+
+const leftColumn = new Container({
+  width: 300,
+  flexDirection: 'column',
+  gap: 16,
+})
+root.add(leftColumn)
+
+const rightColumn = new Container({
+  width: 480,
+  flexDirection: 'column',
+  gap: 16,
+})
+root.add(rightColumn)
 
 // --- Hover button ---
 const hoverButton = new Container({
@@ -52,7 +98,7 @@ const hoverButton = new Container({
     clickCountLabel.setProperties({ text: `Clicked ${++clickCount} time(s)` })
   },
 })
-root.add(hoverButton)
+leftColumn.add(hoverButton)
 
 const hoverLabel = new Text({
   text: 'Hover & Click Me',
@@ -68,7 +114,7 @@ const clickCountLabel = new Text({
   fontSize: 14,
   color: 0x888888,
 })
-root.add(clickCountLabel)
+leftColumn.add(clickCountLabel)
 
 // --- Toggle button ---
 let toggled = false
@@ -90,7 +136,7 @@ const toggleButton = new Container({
     toggleLabel.setProperties({ text: toggled ? 'ON (click to toggle)' : 'OFF (click to toggle)' })
   },
 })
-root.add(toggleButton)
+leftColumn.add(toggleButton)
 
 const toggleLabel = new Text({
   text: 'OFF (click to toggle)',
@@ -99,13 +145,89 @@ const toggleLabel = new Text({
 })
 toggleButton.add(toggleLabel)
 
+// --- Pointer events demo ---
+let pointerEventsDisabled = false
+let pointerEventsClickCount = 0
+
+const pointerEventsToggle = new Container({
+  width: 300,
+  height: 50,
+  backgroundColor: 0x7c3aed,
+  hover: { backgroundColor: 0x6d28d9 },
+  borderRadius: 10,
+  alignItems: 'center',
+  justifyContent: 'center',
+  cursor: 'pointer',
+  onClick: () => {
+    pointerEventsDisabled = !pointerEventsDisabled
+    pointerEventsTarget.setProperties({
+      pointerEvents: pointerEventsDisabled ? 'none' : 'auto',
+      opacity: pointerEventsDisabled ? 0.45 : 1,
+      backgroundColor: pointerEventsDisabled ? 0x374151 : 0xf59e0b,
+      hover: { backgroundColor: pointerEventsDisabled ? 0x374151 : 0xd97706 },
+      cursor: pointerEventsDisabled ? 'default' : 'pointer',
+    })
+    pointerEventsToggleLabel.setProperties({
+      text: pointerEventsDisabled ? 'Pointer Events: none' : 'Pointer Events: auto',
+    })
+    pointerEventsStatus.setProperties({
+      text: pointerEventsDisabled ? 'Target is non-interactable' : 'Target is clickable',
+      color: pointerEventsDisabled ? 0xfca5a5 : 0x86efac,
+    })
+  },
+})
+leftColumn.add(pointerEventsToggle)
+
+const pointerEventsToggleLabel = new Text({
+  text: 'Pointer Events: auto',
+  fontSize: 18,
+  color: 'white',
+})
+pointerEventsToggle.add(pointerEventsToggleLabel)
+
+const pointerEventsTarget = new Container({
+  width: 300,
+  height: 50,
+  backgroundColor: 0xf59e0b,
+  hover: { backgroundColor: 0xd97706 },
+  borderRadius: 10,
+  alignItems: 'center',
+  justifyContent: 'center',
+  cursor: 'pointer',
+  onClick: () => {
+    pointerEventsClicks.setProperties({ text: `Pointer target clicks: ${++pointerEventsClickCount}` })
+  },
+})
+leftColumn.add(pointerEventsTarget)
+
+const pointerEventsTargetLabel = new Text({
+  text: 'Click Me Then Disable Me',
+  fontSize: 18,
+  color: 'white',
+})
+pointerEventsTarget.add(pointerEventsTargetLabel)
+
+const pointerEventsStatus = new Text({
+  text: 'Target is clickable',
+  fontSize: 14,
+  color: 0x86efac,
+})
+leftColumn.add(pointerEventsStatus)
+
+const pointerEventsClicks = new Text({
+  text: 'Pointer target clicks: 0',
+  fontSize: 14,
+  color: 0x888888,
+})
+leftColumn.add(pointerEventsClicks)
+
 // --- Text input ---
 const inputContainer = new Container({
   width: 300,
   flexDirection: 'column',
   gap: 6,
 })
-root.add(inputContainer)
+rightColumn.add(inputContainer)
 
 const inputLabel = new Text({
   text: 'Type something:',
@@ -114,9 +236,20 @@ const inputLabel = new Text({
 })
 inputContainer.add(inputLabel)
 
-const textInput = new Input({
+const inputField = new Container({
   width: 300,
   height: 40,
+  positionType: 'relative',
+  cursor: 'text',
+  onClick: () => textInput.focus(),
+})
+inputContainer.add(inputField)
+
+let inputValue = ''
+
+const textInput = new Input({
+  width: '100%',
+  height: '100%',
   backgroundColor: 0x1e293b,
   hover: { backgroundColor: 0x334155 },
   borderRadius: 8,
@@ -125,12 +258,27 @@ const textInput = new Input({
   paddingX: 12,
   fontSize: 16,
   color: 'white',
+  placeholder: '',
   defaultValue: '',
   onValueChange: (value: string) => {
+    inputValue = value
+    placeholderLabel.setProperties({ display: inputValue.length === 0 ? 'flex' : 'none' })
     echoLabel.setProperties({ text: value ? `Echo: ${value}` : 'Echo: (empty)' })
   },
 })
-inputContainer.add(textInput)
+inputField.add(textInput)
+
+const placeholderLabel = new Text({
+  text: 'Enter some text...',
+  positionType: 'absolute',
+  inset: 0,
+  paddingX: 12,
+  fontSize: 16,
+  lineHeight: '40px',
+  color: 0x64748b,
+  pointerEvents: 'none',
+})
+inputField.add(placeholderLabel)
 
 const echoLabel = new Text({
   text: 'Echo: (empty)',
@@ -144,6 +292,7 @@ const scrollContainer = new Container({
   width: 300,
   height: 150,
   overflow: 'scroll',
+  scrollbarZIndex: 1,
   backgroundColor: 0x0f172a,
   borderRadius: 10,
   borderWidth: 1,
@@ -151,7 +300,7 @@ const scrollContainer = new Container({
   flexDirection: 'column',
   paddingY: 8,
 })
-root.add(scrollContainer)
+rightColumn.add(scrollContainer)
 
 for (let i = 0; i < 20; i++) {
   const item = new Container({
@@ -193,7 +342,7 @@ const card = new Container({
     })
   },
 })
-root.add(card)
+rightColumn.add(card)
 
 const cardTitle = new Text({
   text: 'Interactive Card',
@@ -208,6 +357,49 @@ const cardHint = new Text({
   color: 0x64748b,
 })
 card.add(cardHint)
+
+// --- Emoji fallback card ---
+const emojiCard = new Container({
+  width: 480,
+  backgroundColor: 0x111827,
+  borderRadius: 12,
+  borderWidth: 1,
+  borderColor: 0x374151,
+  flexDirection: 'column',
+  gap: 10,
+  padding: 16,
+})
+rightColumn.add(emojiCard)
+
+emojiCard.add(
+  new Text({
+    text: 'Bitmap Fallback For Missing MSDF Glyphs',
+    fontSize: 15,
+    color: 'white',
+  }),
+)
+
+emojiCard.add(
+  new Text({
+    text: 'Emoji now render through a bitmap atlas instead of falling back to ? when the MSDF font is missing them.',
+    fontSize: 13,
+    lineHeight: '18px',
+    color: 0x9ca3af,
+    width: '100%',
+    wordBreak: 'break-word',
+  }),
+)
+
+emojiCard.add(
+  new Text({
+    text: emojiCharacters,
+    fontSize: 20,
+    lineHeight: '28px',
+    width: '100%',
+    color: 'white',
+    wordBreak: 'break-word',
+  }),
+)
 
 // Resize handler
 function updateSize() {

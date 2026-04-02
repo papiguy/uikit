@@ -140,6 +140,11 @@ export class PropertiesImplementation<
         this.usedConditionals.active.value = hasConditional(this.getPropertiesLayers(), 'active')
         this.usedConditionals.hover.value = hasConditional(this.getPropertiesLayers(), 'hover')
       },
+      (a, b) => {
+        const aTargets = (aliases as Record<string, readonly string[]>)[a[0]]?.length ?? 0
+        const bTargets = (aliases as Record<string, readonly string[]>)[b[0]]?.length ?? 0
+        return bTargets - aTargets
+      },
     )
   }
 

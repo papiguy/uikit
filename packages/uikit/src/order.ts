@@ -32,20 +32,40 @@ export function reversePainterSortStable(a: RenderItem, b: RenderItem) {
     | undefined
   if (aRootSignal != null) {
     const root = aRootSignal.peek()
-    root.reversePainterSortStableCache ??= az
+    root.reversePainterSortStableCache =
+      root.reversePainterSortStableCache == null ? az : Math.min(root.reversePainterSortStableCache, az)
     az = root.reversePainterSortStableCache
   }
   if (bRootSignal != null) {
     const root = bRootSignal.peek()
-    root.reversePainterSortStableCache ??= bz
+    root.reversePainterSortStableCache =
+      root.reversePainterSortStableCache == null ? bz : Math.min(root.reversePainterSortStableCache, bz)
     bz = root.reversePainterSortStableCache
   }
-  const aRoot = aRootSignal?.peek()
-  const bRoot = bRootSignal?.peek()
+  const aRoot = aRootSignal?.peek() as (WithReversePainterSortStableCache & { component?: Object3D }) | undefined
+  const bRoot = bRootSignal?.peek() as (WithReversePainterSortStableCache & { component?: Object3D }) | undefined
   if (aRoot != null && aRoot === bRoot) {
-    const orderResult = compareOrderInfo((a.object as any)[orderInfoKey].value, (b.object as any)[orderInfoKey].value)
-    if (orderResult !== 0) {
-      return orderResult
+    const orderDiff = compareOrderInfo((a.object as any)[orderInfoKey]?.value, (b.object as any)[orderInfoKey]?.value)
+    if (orderDiff !== 0) {
+      return orderDiff
+    }
+  }
+  if (aRoot != null && bRoot != null) {
+    const aRootComponent = aRoot.component
+    const bRootComponent = bRoot.component
+    if (aRootComponent != null && bRootComponent != null) {
+      const rootParent = aRootComponent.parent
+      if (
+        rootParent != null &&
+        rootParent === bRootComponent.parent &&
+        (rootParent as any).isCamera === true
+      ) {
+        const aIndex = rootParent.children.indexOf(aRootComponent)
+        const bIndex = rootParent.children.indexOf(bRootComponent)
+        if (aIndex !== bIndex) {
+          return aIndex - bIndex
+        }
+      }
     }
   }
   //default z comparison

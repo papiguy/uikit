@@ -86,7 +86,7 @@ export class Image<
       this.properties,
       this.borderInset,
       this.size,
-      computed(() => this.isVisible && this.texture.value != null),
+      computed(() => this.isVisible.value && this.texture.value != null),
     )
 
     const data = new Float32Array(16)
@@ -207,7 +207,7 @@ export class Image<
       transformInsideBorder(this.borderInset, this.size, texture)
     }, this.abortSignal)
     abortableEffect(() => {
-      this.visible = isMeshVisible.value
+      this.setRenderVisible(isMeshVisible.value)
       this.root.peek().requestRender?.()
     }, this.abortSignal)
 

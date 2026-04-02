@@ -13,6 +13,7 @@ import {
 } from '../utils.js'
 import { GlyphGroupManager, InstancedGlyphGroup } from './instanced-glyph-group.js'
 import { GlyphLayout, GlyphOutProperties, buildGlyphLayout, computedCustomLayouting } from '../layout.js'
+import { getGrapheme, getNextGraphemeBreak } from '../grapheme.js'
 import { SelectionTransformation } from '../../selection.js'
 import { CaretTransformation } from '../../caret.js'
 import { BaseOutProperties, Properties } from '../../properties/index.js'
@@ -95,8 +96,15 @@ export function createInstancedText(
 
 const noSelectionTransformations: Array<SelectionTransformation> = []
 
+type GlyphPlaceholder = {
+  x: number
+  width: number
+}
+
+type GlyphLineEntry = InstancedGlyph | GlyphPlaceholder
+
 export class InstancedText {
-  private glyphLines: Array<Array<InstancedGlyph | number>> = []
+  private glyphLines: Array<Array<GlyphLineEntry>> = []
   private lastLayout: GlyphLayout | undefined
   private readonly groups = new Map<Font, InstancedGlyphGroup>()
 
@@ -171,12 +179,11 @@ export class InstancedText {
     }
 
     const line = lines[lineIndex]!
-    const whitespaceWidth = layout.font.resolveGlyph(' ').glyphInfo.xadvance * layout.fontSize
     const glyphs = this.glyphLines[lineIndex]!
     let glyphsLength = glyphs.length
     for (let i = 0; i < glyphsLength; i++) {
       const entry = glyphs[i]!
-      if (x < this.getGlyphX(entry, position === 'between' ? 0.5 : 1, whitespaceWidth) + layout.availableWidth / 2) {
+      if (x < this.getGlyphX(entry, position === 'between' ? 0.5 : 1) + layout.availableWidth / 2) {
         return i + line.charIndexOffset
       }
     }
@@ -197,10 +204,9 @@ export class InstancedText {
       this.selectionTransformations.value = noSelectionTransformations
       return
     }
-    const whitespaceWidth = layout.font.resolveGlyph(' ').glyphInfo.xadvance * layout.fontSize
     const [startCharIndexIncl, endCharIndexExcl] = range
     if (endCharIndexExcl <= startCharIndexIncl) {
-      const { lineIndex, x } = this.getGlyphLineAndX(layout, endCharIndexExcl, true, whitespaceWidth, textAlign)
+      const { lineIndex, x } = this.getGlyphLineAndX(layout, endCharIndexExcl, true, textAlign)
       const y = -(
         getYOffset(layout, verticalAlign) -
         layout.availableHeight / 2 +
@@ -212,24 +218,24 @@ export class InstancedText {
       return
     }
     this.caretTransformation.value = undefined
-    const start = this.getGlyphLineAndX(layout, startCharIndexIncl, true, whitespaceWidth, textAlign)
-    const end = this.getGlyphLineAndX(layout, endCharIndexExcl - 1, false, whitespaceWidth, textAlign)
+    const start = this.getGlyphLineAndX(layout, startCharIndexIncl, true, textAlign)
+    const end = this.getGlyphLineAndX(layout, endCharIndexExcl - 1, false, textAlign)
     if (start.lineIndex === end.lineIndex) {
       this.selectionTransformations.value = [
-        this.computeSelectionTransformation(start.lineIndex, start.x, end.x, layout, verticalAlign, whitespaceWidth),
+        this.computeSelectionTransformation(start.lineIndex, start.x, end.x, layout, verticalAlign),
       ]
       return
     }
     const newSelectionTransformations: Array<SelectionTransformation> = [
-      this.computeSelectionTransformation(start.lineIndex, start.x, undefined, layout, verticalAlign, whitespaceWidth),
+      this.computeSelectionTransformation(start.lineIndex, start.x, undefined, layout, verticalAlign),
     ]
     for (let i = start.lineIndex + 1; i < end.lineIndex; i++) {
       newSelectionTransformations.push(
-        this.computeSelectionTransformation(i, undefined, undefined, layout, verticalAlign, whitespaceWidth),
+        this.computeSelectionTransformation(i, undefined, undefined, layout, verticalAlign),
       )
     }
     newSelectionTransformations.push(
-      this.computeSelectionTransformation(end.lineIndex, undefined, end.x, layout, verticalAlign, whitespaceWidth),
+      this.computeSelectionTransformation(end.lineIndex, undefined, end.x, layout, verticalAlign),
     )
     this.selectionTransformations.value = newSelectionTransformations
   }
@@ -240,14 +246,13 @@ export class InstancedText {
     endX: number | undefined,
     layout: GlyphLayout,
     verticalAlign: keyof typeof alignmentYMap,
-    whitespaceWidth: number,
   ): SelectionTransformation {
     const lineGlyphs = this.glyphLines[lineIndex]!
     if (startX == null) {
-      startX = this.getGlyphX(lineGlyphs[0]!, 0, whitespaceWidth)
+      startX = this.getGlyphX(lineGlyphs[0]!, 0)
     }
     if (endX == null) {
-      endX = this.getGlyphX(lineGlyphs[lineGlyphs.length - 1]!, 1, whitespaceWidth)
+      endX = this.getGlyphX(lineGlyphs[lineGlyphs.length - 1]!, 1)
     }
     const height = getOffsetToNextLine(layout.lineHeight)
     const y = -(getYOffset(layout, verticalAlign) - layout.availableHeight / 2 + lineIndex * height)
@@ -259,7 +264,6 @@ export class InstancedText {
     { lines, availableWidth }: GlyphLayout,
     charIndex: number,
     start: boolean,
-    whitespaceWidth: number,
     textAlign: keyof typeof alignmentXMap | 'justify',
   ): { lineIndex: number; x: number } {
     const linesLength = lines.length
@@ -271,7 +275,7 @@ export class InstancedText {
         }
         //line found
         const glyphEntry = this.glyphLines[lineIndex]![Math.max(charIndex - line.charIndexOffset, 0)]!
-        return { lineIndex, x: this.getGlyphX(glyphEntry, start ? 0 : 1, whitespaceWidth) }
+        return { lineIndex, x: this.getGlyphX(glyphEntry, start ? 0 : 1) }
       }
     }
     const lastLine = lines[linesLength - 1]!
@@ -282,14 +286,14 @@ export class InstancedText {
       }
     }
     const lastGlyphEntry = this.glyphLines[linesLength - 1]![lastLine.charLength - 1]!
-    return { lineIndex: linesLength - 1, x: this.getGlyphX(lastGlyphEntry, 1, whitespaceWidth) }
+    return { lineIndex: linesLength - 1, x: this.getGlyphX(lastGlyphEntry, 1) }
   }
 
-  private getGlyphX(entry: number | InstancedGlyph, widthMultiplier: number, whitespaceWidth: number) {
-    if (typeof entry === 'number') {
-      return entry + widthMultiplier * whitespaceWidth
+  private getGlyphX(entry: GlyphLineEntry, widthMultiplier: number) {
+    if (entry instanceof InstancedGlyph) {
+      return entry.getX(widthMultiplier)
     }
-    return entry.getX(widthMultiplier)
+    return entry.x + widthMultiplier * entry.width
   }
 
   private show() {
@@ -346,29 +350,29 @@ export class InstancedText {
           let previousGlyph: ResolvedGlyph | undefined
           const glyphs = this.glyphLines[lineIndex]!
 
-          for (
-            let charIndex = firstNonWhitespaceCharIndex;
-            charIndex < firstNonWhitespaceCharIndex + charLength;
-            charIndex++
-          ) {
+          for (let charIndex = firstNonWhitespaceCharIndex; charIndex < firstNonWhitespaceCharIndex + charLength; ) {
+            const nextCharIndex = getNextGraphemeBreak(text, charIndex)
             const glyphIndex = charIndex - firstNonWhitespaceCharIndex
-            const char = text[charIndex]!
+            const char = getGrapheme(text, charIndex, nextCharIndex)
             const resolvedGlyph = font.resolveGlyph(char)
-            if (char === ' ' || charIndex > nonWhitespaceCharLength + firstNonWhitespaceCharIndex) {
-              const xPosition = x + getGlyphOffsetX(font, fontSize, resolvedGlyph, previousGlyph)
-              if (typeof glyphs[glyphIndex] === 'number') {
-                glyphs[glyphIndex] = xPosition
-              } else {
-                glyphs.splice(glyphIndex, 0, xPosition)
-              }
-              x += offsetPerWhitespace + getOffsetToNextGlyph(fontSize, resolvedGlyph.glyphInfo, letterSpacing)
+            const glyphX = x + getGlyphOffsetX(font, fontSize, resolvedGlyph, previousGlyph)
+            const glyphWidth =
+              getOffsetToNextGlyph(fontSize, resolvedGlyph.glyphInfo, letterSpacing) +
+              (char === ' ' ? offsetPerWhitespace : 0)
+            if (char === ' ' || charIndex >= nonWhitespaceCharLength + firstNonWhitespaceCharIndex) {
+              replaceRangeWithPlaceholder(glyphs, glyphIndex, nextCharIndex - firstNonWhitespaceCharIndex, {
+                x: glyphX,
+                width: glyphWidth,
+              })
+              x += glyphWidth
               previousGlyph = resolvedGlyph
+              charIndex = nextCharIndex
               continue
             }
             //non space character
-            //delete undefined entries so we find a reusable glyph
+            //delete placeholder entries so we find a reusable glyph
             let glyphOrNumber = glyphs[glyphIndex]
-            while (glyphIndex < glyphs.length && typeof glyphOrNumber == 'number') {
+            while (glyphIndex < glyphs.length && isPlaceholderEntry(glyphOrNumber)) {
               glyphs.splice(glyphIndex, 1)
               glyphOrNumber = glyphs[glyphIndex]
             }
@@ -387,14 +391,19 @@ export class InstancedText {
             instancedGlyph.updateGroup(this.getGroup(resolvedGlyph.font))
             instancedGlyph.updateGlyphAndTransformation(
               resolvedGlyph.glyphInfo,
-              x + getGlyphOffsetX(font, fontSize, resolvedGlyph, previousGlyph),
+              glyphX,
               -(y + getGlyphOffsetY(fontSize, lineHeight, resolvedGlyph.glyphInfo)),
               fontSize,
               pixelSize,
             )
             instancedGlyph.show()
+            replaceRangeWithPlaceholder(glyphs, glyphIndex + 1, nextCharIndex - firstNonWhitespaceCharIndex, {
+              x: glyphX,
+              width: glyphWidth,
+            })
             previousGlyph = resolvedGlyph
             x += getOffsetToNextGlyph(fontSize, resolvedGlyph.glyphInfo, letterSpacing)
+            charIndex = nextCharIndex
           }
 
           y += getOffsetToNextLine(lineHeight)
@@ -404,7 +413,7 @@ export class InstancedText {
           const newGlyphsLength = charLength
           for (let ii = newGlyphsLength; ii < glyphsLength; ii++) {
             const glyph = glyphs[ii]!
-            if (typeof glyph === 'number') {
+            if (isPlaceholderEntry(glyph)) {
               continue
             }
             glyph.hide()
@@ -475,7 +484,7 @@ function getYOffset(layout: GlyphLayout, verticalAlign: keyof typeof alignmentYM
 }
 
 function traverseGlyphs(
-  glyphLines: Array<Array<InstancedGlyph | number>>,
+  glyphLines: Array<Array<GlyphLineEntry>>,
   fn: (glyph: InstancedGlyph) => void,
   offset: number = 0,
 ): void {
@@ -485,10 +494,29 @@ function traverseGlyphs(
     const glyphsLength = glyphs.length
     for (let ii = 0; ii < glyphsLength; ii++) {
       const glyph = glyphs[ii]!
-      if (typeof glyph == 'number') {
+      if (isPlaceholderEntry(glyph)) {
         continue
       }
       fn(glyph)
     }
+  }
+}
+
+function isPlaceholderEntry(entry: GlyphLineEntry | undefined): entry is GlyphPlaceholder {
+  return entry != null && !(entry instanceof InstancedGlyph)
+}
+
+function replaceRangeWithPlaceholder(
+  glyphs: Array<GlyphLineEntry>,
+  start: number,
+  end: number,
+  placeholder: GlyphPlaceholder,
+) {
+  for (let i = start; i < end; i++) {
+    const current = glyphs[i]
+    if (current instanceof InstancedGlyph) {
+      current.hide()
+    }
+    glyphs[i] = placeholder
   }
 }

@@ -131,6 +131,14 @@ function _applyGlyphShader(material: any, font: Font) {
     const clipOpacity = computeClipping()
     Discard(clipOpacity.lessThanEqual(0.0))
 
+    if (font.renderMode !== 'msdf') {
+      const sampled = fontPageTexture.sample(vFontUv)
+      Discard(sampled.a.lessThanEqual(0.0))
+      return font.renderMode === 'bitmap-color'
+        ? vec4(sampled.rgb, sampled.a.mul(vRGBA.a).mul(clipOpacity))
+        : vec4(vRGBA.rgb, sampled.a.mul(vRGBA.a).mul(clipOpacity))
+    }
+
     const dist = getDistance().sub(0.5).mul(float(distanceRangeUniform))
 
     const aaDist = clamp(

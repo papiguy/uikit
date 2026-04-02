@@ -108,6 +108,36 @@ pnpm dev
 
 Append `?renderer=webgpu` to the URL to use the WebGPU renderer.
 
+## Local vs Publish
+
+This workspace supports two package-resolution modes:
+
+- **Local workspace mode**: internal packages depend on each other via `workspace:` ranges, so examples and apps resolve packages from the workspace.
+- **Publish mode**: `pnpm pack` / `pnpm publish` rewrites those same internal dependencies to versioned semver ranges and applies package-level publish overrides such as `dist` entrypoints where configured.
+
+Validate both modes before publishing:
+
+```bash
+pnpm build:all
+pnpm check:package-modes
+```
+
+To publish `@ni2khanna/uikit`:
+
+```bash
+pnpm install
+pnpm build:all
+pnpm check:package-modes
+pnpm --filter @ni2khanna/uikit pack
+pnpm --filter @ni2khanna/uikit publish --access public
+```
+
+Notes:
+
+- Bump `packages/uikit/package.json` before publishing if that version already exists on npm.
+- `@ni2khanna/uikit` depends on `@ni2khanna/msdfonts` and `@ni2khanna/uikit-pub-sub`; publish those first if their referenced versions are not already available on npm.
+- If you need to publish from a dirty git worktree, add `--no-git-checks` to the `pnpm publish` command.
+
 ## Acknowledgements
 
 This project is a fork of [**@pmndrs/uikit**](https://github.com/pmndrs/uikit), created and maintained by [Poimandres](https://github.com/pmndrs) ([@pmndrs](https://github.com/pmndrs)).
