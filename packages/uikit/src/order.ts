@@ -3,10 +3,17 @@ import { Object3D, RenderItem } from 'three'
 import { abortableEffect, readReactive } from './utils.js'
 import { Properties } from './properties/index.js'
 
-export type WithReversePainterSortStableCache = { reversePainterSortStableCache?: number }
+export type WithReversePainterSortStableCache = {
+  reversePainterSortStableCache?: number
+  sceneGraphOrderCachePrepared?: boolean
+}
 
 export const reversePainterSortStableCacheKey = Symbol('reverse-painter-sort-stable-cache-key')
 export const orderInfoKey = Symbol('order-info-key')
+export const sceneGraphOrderKey = Symbol('scene-graph-order-key')
+export const sceneGraphPathKey = Symbol('scene-graph-path-key')
+export const sceneGraphPathParentKey = Symbol('scene-graph-path-parent-key')
+export const sceneGraphPathParentCacheKey = Symbol('scene-graph-path-parent-cache-key')
 
 export function reversePainterSortStable(a: RenderItem, b: RenderItem) {
   if (a.groupOrder !== b.groupOrder) {
@@ -35,13 +42,17 @@ export function reversePainterSortStable(a: RenderItem, b: RenderItem) {
       root.reversePainterSortStableCache == null ? bz : Math.min(root.reversePainterSortStableCache, bz)
     bz = root.reversePainterSortStableCache
   }
-  if (aRootSignal != null && aRootSignal.peek() === bRootSignal?.peek()) {
+  const aRoot = aRootSignal?.peek() as (WithReversePainterSortStableCache & { component?: Object3D }) | undefined
+  const bRoot = bRootSignal?.peek() as (WithReversePainterSortStableCache & { component?: Object3D }) | undefined
+  if (aRoot != null && aRoot === bRoot) {
     const orderDiff = compareOrderInfo((a.object as any)[orderInfoKey]?.value, (b.object as any)[orderInfoKey]?.value)
-    return orderDiff !== 0 ? orderDiff : a.id - b.id
+    if (orderDiff !== 0) {
+      return orderDiff
+    }
   }
-  if (aRootSignal != null && bRootSignal != null) {
-    const aRootComponent = (aRootSignal.peek() as any).component as Object3D | undefined
-    const bRootComponent = (bRootSignal.peek() as any).component as Object3D | undefined
+  if (aRoot != null && bRoot != null) {
+    const aRootComponent = aRoot.component
+    const bRootComponent = bRoot.component
     if (aRootComponent != null && bRootComponent != null) {
       const rootParent = aRootComponent.parent
       if (
@@ -58,7 +69,95 @@ export function reversePainterSortStable(a: RenderItem, b: RenderItem) {
     }
   }
   //default z comparison
-  return az !== bz ? bz - az : a.id - b.id
+  if (az !== bz) {
+    return bz - az
+  }
+  return compareSceneGraphOrder(a.object, b.object, aRoot, bRoot)
+}
+
+function compareSceneGraphOrder(
+  a: Object3D,
+  b: Object3D,
+  aRoot: (WithReversePainterSortStableCache & { component?: Object3D }) | undefined,
+  bRoot: (WithReversePainterSortStableCache & { component?: Object3D }) | undefined,
+): number {
+  if (a === b) {
+    return 0
+  }
+
+  if (aRoot != null && aRoot === bRoot) {
+    ensureSceneGraphOrderCache(aRoot)
+
+    const aOrder = (a as any)[sceneGraphOrderKey] as number | undefined
+    const bOrder = (b as any)[sceneGraphOrderKey] as number | undefined
+    if (aOrder != null && bOrder != null && aOrder !== bOrder) {
+      return aOrder - bOrder
+    }
+  }
+
+  return compareSceneGraphOrderByPath(a, b)
+}
+
+function compareSceneGraphOrderByPath(a: Object3D, b: Object3D): number {
+  const aPath = getPathToRoot(a)
+  const bPath = getPathToRoot(b)
+  const minLength = Math.min(aPath.length, bPath.length)
+
+  let index = 0
+  while (index < minLength && aPath[index] === bPath[index]) {
+    index += 1
+  }
+
+  if (index === 0) {
+    return a.id - b.id
+  }
+
+  if (index === aPath.length || index === bPath.length) {
+    return aPath.length - bPath.length
+  }
+
+  const commonAncestor = aPath[index - 1]
+  if (commonAncestor == null) {
+    return a.id - b.id
+  }
+  const aIndex = commonAncestor.children.indexOf(aPath[index]!)
+  const bIndex = commonAncestor.children.indexOf(bPath[index]!)
+
+  if (aIndex === -1 || bIndex === -1 || aIndex === bIndex) {
+    return a.id - b.id
+  }
+
+  return aIndex - bIndex
+}
+
+function getPathToRoot(object: Object3D): Array<Object3D> {
+  const parent = object.parent
+  const cachedPath = (object as any)[sceneGraphPathKey] as Array<Object3D> | undefined
+  if (cachedPath != null) {
+    const cachedParent = (object as any)[sceneGraphPathParentKey] as Object3D | null | undefined
+    const cachedParentPath = (object as any)[sceneGraphPathParentCacheKey] as Array<Object3D> | undefined
+    if (cachedParent === parent && (parent == null || cachedParentPath === (parent as any)[sceneGraphPathKey])) {
+      return cachedPath
+    }
+  }
+
+  const path = parent == null ? [object] : [...getPathToRoot(parent), object]
+  ;(object as any)[sceneGraphPathKey] = path
+  ;(object as any)[sceneGraphPathParentKey] = parent
+  ;(object as any)[sceneGraphPathParentCacheKey] = parent == null ? undefined : (parent as any)[sceneGraphPathKey]
+  return path
+}
+
+function ensureSceneGraphOrderCache(root: WithReversePainterSortStableCache & { component?: Object3D }): void {
+  if (root.sceneGraphOrderCachePrepared) {
+    return
+  }
+
+  let index = 0
+  root.component?.traverse((object) => {
+    ;(object as any)[sceneGraphOrderKey] = index++
+  })
+  root.sceneGraphOrderCachePrepared = true
 }
 
 //the following order tries to represent the most common element order of the respective element types (e.g. panels are most likely the background element)
@@ -181,6 +280,12 @@ export function setupRenderOrder(
   root: { peek(): WithReversePainterSortStableCache },
   orderInfo: { value: OrderInfo | undefined },
 ) {
+  const rootValue = root.peek()
+  rootValue.sceneGraphOrderCachePrepared = false
   ;(target as any)[reversePainterSortStableCacheKey] = root
   ;(target as any)[orderInfoKey] = orderInfo
+  ;(target as any)[sceneGraphOrderKey] = undefined
+  ;(target as any)[sceneGraphPathKey] = undefined
+  ;(target as any)[sceneGraphPathParentKey] = undefined
+  ;(target as any)[sceneGraphPathParentCacheKey] = undefined
 }
