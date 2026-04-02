@@ -25,16 +25,37 @@ export function reversePainterSortStable(a: RenderItem, b: RenderItem) {
     | undefined
   if (aRootSignal != null) {
     const root = aRootSignal.peek()
-    root.reversePainterSortStableCache ??= az
+    root.reversePainterSortStableCache =
+      root.reversePainterSortStableCache == null ? az : Math.min(root.reversePainterSortStableCache, az)
     az = root.reversePainterSortStableCache
   }
   if (bRootSignal != null) {
     const root = bRootSignal.peek()
-    root.reversePainterSortStableCache ??= bz
+    root.reversePainterSortStableCache =
+      root.reversePainterSortStableCache == null ? bz : Math.min(root.reversePainterSortStableCache, bz)
     bz = root.reversePainterSortStableCache
   }
   if (aRootSignal != null && aRootSignal.peek() === bRootSignal?.peek()) {
-    return compareOrderInfo((a.object as any)[orderInfoKey].value, (b.object as any)[orderInfoKey].value)
+    const orderDiff = compareOrderInfo((a.object as any)[orderInfoKey]?.value, (b.object as any)[orderInfoKey]?.value)
+    return orderDiff !== 0 ? orderDiff : a.id - b.id
+  }
+  if (aRootSignal != null && bRootSignal != null) {
+    const aRootComponent = (aRootSignal.peek() as any).component as Object3D | undefined
+    const bRootComponent = (bRootSignal.peek() as any).component as Object3D | undefined
+    if (aRootComponent != null && bRootComponent != null) {
+      const rootParent = aRootComponent.parent
+      if (
+        rootParent != null &&
+        rootParent === bRootComponent.parent &&
+        (rootParent as any).isCamera === true
+      ) {
+        const aIndex = rootParent.children.indexOf(aRootComponent)
+        const bIndex = rootParent.children.indexOf(bRootComponent)
+        if (aIndex !== bIndex) {
+          return aIndex - bIndex
+        }
+      }
+    }
   }
   //default z comparison
   return az !== bz ? bz - az : a.id - b.id
