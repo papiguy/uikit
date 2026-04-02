@@ -243,7 +243,15 @@ function selectLayerValue(
     if (layerIndex < startLayerIndex) {
       continue
     }
-    value = layerIndex === Infinity ? defaultValue : propertiesLayers.get(layerIndex)![key]
+    if (layerIndex === Infinity) {
+      value = defaultValue
+    } else {
+      const layer = propertiesLayers.get(layerIndex)
+      if (layer == null) {
+        continue
+      }
+      value = layer[key]
+    }
     if (typeof value === 'object' && value instanceof Signal) {
       if (onSignal != null) {
         onSignal(layerIndex)
