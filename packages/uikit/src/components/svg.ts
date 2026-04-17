@@ -11,7 +11,7 @@ import {
   Vector3,
 } from 'three'
 import { ThreeEventMap } from '../events.js'
-import { BoundingBox, Content, ContentOutProperties } from './content.js'
+import { Content, ContentBoundingBox, ContentOutProperties } from './content.js'
 import { computed, signal } from '@preact/signals-core'
 import { abortableEffect, loadResourceWithParams } from '../utils.js'
 import { SVGLoader, SVGResult } from 'three/examples/jsm/loaders/SVGLoader.js'
@@ -39,13 +39,13 @@ export class Svg<
       defaultOverrides?: InProperties<OutProperties>
     },
   ) {
-    const boundingBox = signal<BoundingBox | undefined>(undefined)
+    const contentBoundingBox = signal<ContentBoundingBox | undefined>(undefined)
     super(inputProperties, initialClasses, {
       ...config,
       remeasureOnChildrenChange: false,
       depthWriteDefault: false,
       supportFillProperty: true,
-      boundingBox,
+      contentBoundingBox,
     })
 
     const svgResult = signal<Awaited<ReturnType<typeof loadSvg>>>(undefined)
@@ -61,7 +61,7 @@ export class Svg<
     )
     abortableEffect(() => {
       const result = svgResult.value
-      boundingBox.value = result?.boundingBox
+      contentBoundingBox.value = result?.contentBoundingBox
       if (result == null || result.meshes.length === 0) {
         this.notifyAncestorsChanged()
         return
@@ -83,7 +83,7 @@ type SvgTexture = Texture & { disposable?: boolean; objectUrl?: string }
 
 type SvgLoadResult = {
   meshes: Array<Mesh>
-  boundingBox?: BoundingBox
+  contentBoundingBox?: ContentBoundingBox
 }
 
 async function loadSvg({ src, content }: { src?: string; content?: string }): Promise<SvgLoadResult | undefined> {
@@ -129,9 +129,9 @@ async function loadSvg({ src, content }: { src?: string; content?: string }): Pr
       }
     }
   }
-  const boundingBox = getSvgBoundingBox(result.xml)
+  const contentBoundingBox = getSvgContentBoundingBox(result.xml)
 
-  return { meshes, boundingBox }
+  return { meshes, contentBoundingBox }
 }
 
 function disposeSvg(result: Awaited<ReturnType<typeof loadSvg>>) {
@@ -237,15 +237,15 @@ function createSvgMesh(geometry: ShapeGeometry | Mesh['geometry'], material: Mes
 }
 
 async function loadSvgTextureQuad(svgContent: string, root: Element): Promise<SvgLoadResult | undefined> {
-  const boundingBox = getSvgBoundingBox(root)
+  const contentBoundingBox = getSvgContentBoundingBox(root)
   const texture = await loadSvgTexture(svgContent)
   if (texture == null) {
     return undefined
   }
 
-  const width = boundingBox?.size.x ?? parseSvgLength(root.getAttribute('width')) ?? 1
-  const height = boundingBox?.size.y ?? parseSvgLength(root.getAttribute('height')) ?? 1
-  const center = boundingBox?.center ?? new Vector3(width / 2, -height / 2, 0.001)
+  const width = contentBoundingBox?.size.x ?? parseSvgLength(root.getAttribute('width')) ?? 1
+  const height = contentBoundingBox?.size.y ?? parseSvgLength(root.getAttribute('height')) ?? 1
+  const center = contentBoundingBox?.center ?? new Vector3(width / 2, -height / 2, 0.001)
 
   const material = new MeshBasicMaterial({
     color: '#fff',
@@ -260,7 +260,7 @@ async function loadSvgTextureQuad(svgContent: string, root: Element): Promise<Sv
 
   return {
     meshes: [mesh],
-    boundingBox: boundingBox ?? { center, size: new Vector3(width, height, 0.001) },
+    contentBoundingBox: contentBoundingBox ?? { center, size: new Vector3(width, height, 0.001) },
   }
 }
 
@@ -328,7 +328,7 @@ function shouldRenderSvgAsTexture(root: Element): boolean {
   })
 }
 
-function getSvgBoundingBox(root: Element): BoundingBox | undefined {
+function getSvgContentBoundingBox(root: Element): ContentBoundingBox | undefined {
   const viewBoxNumbers = root
     .getAttribute('viewBox')
     ?.split(/\s+/)

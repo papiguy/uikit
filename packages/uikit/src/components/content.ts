@@ -36,7 +36,7 @@ const positionHelper = new Vector3()
 const scaleHelper = new Vector3()
 const vectorHelper = new Vector3()
 
-export type BoundingBox = { size: Vector3; center: Vector3 }
+export type ContentBoundingBox = { size: Vector3; center: Vector3 }
 
 const RemeasureOnChildrenChangeDefault = true
 const DepthWriteDefaultDefault = true
@@ -47,7 +47,7 @@ export class Content<
   EM extends ThreeEventMap = ThreeEventMap,
   OutProperties extends ContentOutProperties<EM> = ContentOutProperties<EM>,
 > extends Component<T, EM, OutProperties> {
-  readonly boundingBox = signal<BoundingBox>({ size: new Vector3(1, 1, 1), center: new Vector3(0, 0, 0) })
+  readonly contentBoundingBox = signal<ContentBoundingBox>({ size: new Vector3(1, 1, 1), center: new Vector3(0, 0, 0) })
   readonly clippingPlanes: Array<Plane>
 
   private readonly childrenMatrix = new Matrix4()
@@ -59,7 +59,7 @@ export class Content<
       remeasureOnChildrenChange?: boolean
       depthWriteDefault?: boolean
       supportFillProperty?: boolean
-      boundingBox?: Signal<BoundingBox | undefined>
+      contentBoundingBox?: Signal<ContentBoundingBox | undefined>
       defaultOverrides?: InProperties<OutProperties>
       renderContext?: RenderContext
     },
@@ -77,8 +77,8 @@ export class Content<
         defaultAspectRatio.value = undefined
         return
       }
-      const boundingBox = config?.boundingBox?.value ?? this.boundingBox.value
-      defaultAspectRatio.value = boundingBox.size.x / boundingBox.size.y
+      const contentBoundingBox = config?.contentBoundingBox?.value ?? this.contentBoundingBox.value
+      defaultAspectRatio.value = contentBoundingBox.size.x / contentBoundingBox.size.y
     }, this.abortSignal)
     this.material.visible = false
 
@@ -124,7 +124,7 @@ export class Content<
       const innerWidth = width - leftInset - rightInset
       const innerHeight = height - topInset - bottomInset
 
-      const boundingBox = config?.boundingBox?.value ?? this.boundingBox.value
+      const contentBoundingBox = config?.contentBoundingBox?.value ?? this.contentBoundingBox.value
 
       const pixelSize = this.properties.value.pixelSize
       scaleHelper
@@ -132,15 +132,15 @@ export class Content<
           innerWidth * pixelSize,
           innerHeight * pixelSize,
           this.properties.value.keepAspectRatio
-            ? (innerHeight * pixelSize * boundingBox.size.z) / boundingBox.size.y
-            : boundingBox.size.z,
+            ? (innerHeight * pixelSize * contentBoundingBox.size.z) / contentBoundingBox.size.y
+            : contentBoundingBox.size.z,
         )
-        .divide(boundingBox.size)
+        .divide(contentBoundingBox.size)
 
-      positionHelper.copy(boundingBox.center).negate()
+      positionHelper.copy(contentBoundingBox.center).negate()
 
       positionHelper.z -=
-        alignmentZMap[this.properties.value.depthAlign as keyof typeof alignmentZMap] * boundingBox.size.z
+        alignmentZMap[this.properties.value.depthAlign as keyof typeof alignmentZMap] * contentBoundingBox.size.z
       positionHelper.multiply(scaleHelper)
       positionHelper.add(
         vectorHelper.set((leftInset - rightInset) * 0.5 * pixelSize, (bottomInset - topInset) * 0.5 * pixelSize, 0),
@@ -218,7 +218,7 @@ export class Content<
           : undefined
     })
 
-    if (this.config?.boundingBox == null) {
+    if (this.config?.contentBoundingBox == null) {
       //no need to compute the bounding box ourselves
       box3Helper.makeEmpty()
       for (const child of this.children) {
@@ -235,7 +235,7 @@ export class Content<
       const center = new Vector3()
       box3Helper.getSize(size).max(smallValue)
       box3Helper.getCenter(center)
-      this.boundingBox.value = { center, size }
+      this.contentBoundingBox.value = { center, size }
     }
 
     this.root.peek().requestRender?.()
